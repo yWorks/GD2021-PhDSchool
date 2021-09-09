@@ -83,6 +83,8 @@
     <toggle-button @change="toggleWebGL" :labels="{checked: 'WebGL2', unchecked: 'SVG'}" :width="70"/>
     <span class="labeled">Automatic Render Mode: </span>
     <toggle-button @change="toggleAutoWebGL" :labels="true" :width="70"/>
+    <span class="labeled">WebGL Animation Type: </span>
+    <toggle-button @change="toggleWebGLAnimation" :labels="{checked: 'Fade', unchecked: 'Pulse'}" :width="70" :value="true"/>
     <span class="labeled">Current FPS: {{fps}}</span>
     <span class="spacer"></span>
     <input
@@ -150,6 +152,10 @@ export default class Toolbar extends Vue {
 
   private toggleAutoWebGL(evt:any) {
     eventBus.$emit('toggleAutoWebGL', evt.value)
+  }
+
+  private toggleWebGLAnimation(evt:any) {
+    eventBus.$emit('toggleWebGLAnimation', evt.value)
   }
 
   private exportDiagram(format: 'svg' | 'png' | 'pdf') {

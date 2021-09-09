@@ -80,7 +80,7 @@ import ContextMenu from '../components/ContextMenu.vue'
 import GraphSearch from '../lib/GraphSearch'
 import {FPSMeter} from "@/lib/FPSMeter"
 import {HoverManager} from "@/lib/HoverManager"
-import {WebGL2Support} from "@/lib/WebGL2Support"
+import {AnimationType, WebGL2Support} from "@/lib/WebGL2Support"
 
 License.value = licenseData
 
@@ -117,8 +117,16 @@ export default class extends Vue {
     
     this.graphComponent.graph = await loadGraph()
 
+    // center the newly created graph
+    await this.graphComponent.fitGraphBounds()
+
     this.webGL2Support = new WebGL2Support(this.graphComponent)
     await this.webGL2Support.initialize()
+    this.webGL2Support.addRenderModeChangeChanged((webGLEnabled:boolean) => {
+      if(webGLEnabled) {
+        this.hoverItemHighlightManager.clearHighlights()
+      }
+    })
 
     this.enableHighlights()
 
@@ -143,9 +151,6 @@ export default class extends Vue {
     )
 
     this.registerToolbarEvents()
-
-    // center the newly created graph
-    this.graphComponent.fitGraphBounds()
   }
 
   private enableHighlights() {
@@ -155,6 +160,7 @@ export default class extends Vue {
     this.hoverManager.enable()
 
     this.enableSVGHighlights()
+    this.enableWebGLHighlights()
   }
 
   private enableSVGHighlights() {
@@ -233,8 +239,23 @@ export default class extends Vue {
     this.hoverManager.enable()
 
     this.hoverManager.addHoveredItemsChanged((items: IModelItem[]) => {
-      this.hoverItemHighlightManager.clearHighlights()
-      items.forEach((item) => this.hoverItemHighlightManager.addHighlight(item))      
+      if (!this.webGL2Support.isWebGL2Rendering) {
+        this.hoverItemHighlightManager.clearHighlights()
+        items.forEach((item) => this.hoverItemHighlightManager.addHighlight(item))
+      }
+    })
+  }
+
+  private enableWebGLHighlights() {
+    this.hoverManager.addHoveredItemsChanged((items: IModelItem[]) => {
+      if (this.webGL2Support.isWebGL2Rendering) {
+        this.webGL2Support.animator.stop()
+        this.webGL2Support.clearAnimations()
+        this.graphComponent.invalidate()
+        if (items.length !== 0) {
+          this.webGL2Support.enableAnimations(items)
+        }
+      }
     })
   }
 
@@ -315,6 +336,9 @@ export default class extends Vue {
     })
     eventBus.$on('toggleAutoWebGL', (enable:boolean) => {
       this.webGL2Support.automaticRenderMode = enable
+    })
+    eventBus.$on('toggleWebGLAnimation', (enable:boolean) => {
+      this.webGL2Support.animationType = enable?AnimationType.FADE_OUT:AnimationType.HIGHLIGHT
     })
   }
 

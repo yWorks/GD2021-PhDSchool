@@ -25,12 +25,35 @@ import {
 } from "yfiles";
 import {LevelOfDetailLabelStyle} from "@/lib/LevelOfDetailLabelStyle";
 
+export enum AnimationType {
+    FADE_OUT,
+    HIGHLIGHT
+}
+
 export type RenderModeChangedListener = (newValue: boolean) => void
 
 /**
  * Helper class that encapsulates all WebGL2 support
  */
 export class WebGL2Support {
+
+    get animationType(): AnimationType {
+        return this._animationType;
+    }
+
+    set animationType(value: AnimationType) {
+        this.animator.stop()
+        this.clearAnimations()
+        this._animationType = value;
+    }
+    get animator(): Animator {
+        return this._animator;
+    }
+
+    private readonly _animator: Animator;
+
+    private _animationType:AnimationType = AnimationType.FADE_OUT
+
     get automaticRenderMode(): boolean {
         return this._automaticRenderMode;
     }
@@ -73,6 +96,8 @@ export class WebGL2Support {
         this.graphComponent = graphComponent;
         this.unoptimizedModelManager = this.graphComponent.graphModelManager
         this.selectionManager = this.graphComponent.selectionIndicatorManager
+        this._animator = new Animator(graphComponent)
+        this.animator.allowUserInteraction = true
     }
 
     public async initialize() {
@@ -84,7 +109,9 @@ export class WebGL2Support {
     public toggleWebGL2(enable: boolean) {
         if (enable && !this.isWebGL2Rendering) {
             this.isWebGL2Rendering = true
-           if (!this.iconData) {
+            this.animator.stop()
+            this.clearAnimations()
+            if (!this.iconData) {
                 loadIcons(this.graphComponent).then((icons:Map<string, ImageData|null>) => {
                     //Wait until icons have been loaded
                     this.iconData = icons
@@ -195,6 +222,65 @@ export class WebGL2Support {
         })
     }
 
+    clearAnimations() {
+        const graph = this.graphComponent.graph
+        if (this.graphComponent.graphModelManager instanceof WebGL2GraphModelManager) {
+            const gmm = this.graphComponent.graphModelManager as WebGL2GraphModelManager
+            graph.nodes.forEach(node => {
+                gmm.setAnimations(node, null)
+            })
+            graph.edges.forEach(edge => {
+                gmm.setAnimations(edge, null)
+            })
+            graph.labels.forEach(label => {
+                gmm.setAnimations(label, null)
+            })
+        }
+    }
+
+    enableAnimations(items: IModelItem[]) {
+        if (this.graphComponent.graphModelManager instanceof WebGL2GraphModelManager) {
+            const gmm = this.graphComponent.graphModelManager as WebGL2GraphModelManager
+            let animation: IAnimation | null = null
+
+            if (this.animationType == AnimationType.FADE_OUT) {
+                const webGLAnimation = gmm.createFadeAnimation({
+                    fadeType: WebGL2FadeAnimationType.FADE_TO_GRAY,
+                    preferredDuration: "500ms"
+                })
+                animation = webGLAnimation
+                const itemMap = new Set()
+                items.forEach((n) => itemMap.add(n))
+
+                //Fade out all nodes EXCEPT the highlighted ones, together with adjacent edges and labels
+                this.graphComponent.graph.nodes.filter((n) => !itemMap.has(n)).forEach((node) => {
+                    gmm.setAnimations(node, [webGLAnimation])
+                    node.labels.forEach(label => gmm.setAnimations(label, [webGLAnimation]))
+                    this.graphComponent.graph.edgesAt(node).forEach((edge) => gmm.setAnimations(edge, [webGLAnimation]))
+                })
+            } else {
+                const webGLAnimation = gmm.createPulseAnimation({
+                    preferredDuration: "5s"
+                })
+                animation = webGLAnimation
+                items.forEach(item => {
+                    if (item instanceof INode) {
+                        const node = item as INode
+                        gmm.setAnimations(node, [webGLAnimation])
+                        node.labels.forEach(label => gmm.setAnimations(label, [webGLAnimation]))
+                    } else {
+                        if (item instanceof IEdge) {
+                            const edge = item as IEdge
+                            gmm.setAnimations(edge, [webGLAnimation])
+                        }
+                    }
+                })
+            }
+            if (animation !== null) {
+                this.animator.animate(animation)
+            }
+        }
+    }
 
     /**
      * React to zoom level changes and switch to WebGL2 resp. SVG

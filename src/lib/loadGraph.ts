@@ -117,19 +117,19 @@ export default async function loadGraph() {
   //Adjust node labels for the countries
   //so that they are scaled nicely
   graph.nodeLabels.filter(l => !l.text.startsWith("Louvain:")).forEach(
-      (label) =>
-      {
+    (label) =>
+    {
+      if(label.style instanceof DefaultLabelStyle) {
         const style = label.style as DefaultLabelStyle
-        if(style) {
-          const fontSize = style.textSize
-          const desiredWidth = (<INode>label.owner).layout.width*0.5
-          const actualWidth = label.layout.width
-          const newFontSize = fontSize*desiredWidth/actualWidth
-          const newStyle = style.clone()
-          newStyle.textSize = newFontSize
-          graph.setStyle(label, newStyle)
-        }
-      }
+        const fontSize = style.textSize
+        const desiredWidth = (<INode>label.owner).layout.width*0.5
+        const actualWidth = label.layout.width
+        const newFontSize = fontSize*desiredWidth/actualWidth
+        const newStyle = style.clone()
+        newStyle.textSize = newFontSize
+        graph.setStyle(label, newStyle)
+      }      
+    }
   )
 
   const out3 = await analyze(
@@ -144,6 +144,7 @@ export default async function loadGraph() {
       edgeWeights: () => 1,
     }
   )
+
   const out4 = await arrange(out3, {
     layoutStyle: 'organic',
     layoutOrientation: 'top-to-bottom',
@@ -157,7 +158,7 @@ export default async function loadGraph() {
     gridColumns: null,
     gridRows: null,
   })
-
+  
   //Wrap all labels into LoD wrapper
   graph.labels.filter(l => !(l.style instanceof LevelOfDetailLabelStyle)).forEach(
       label => {

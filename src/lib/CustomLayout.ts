@@ -37,12 +37,17 @@ import {
   EdgeBundlingStage,
   EdgeBundlingStageData,
   GraphComponent,
+  HierarchicLayoutData,
+  IEdge,
   IGraph,
   ILayoutAlgorithm,
   InterleavedMode,
   LayoutData,
-  LayoutExecutor,
-  MinimumNodeSizeStage,
+  LayoutDescriptor,
+  LayoutExecutor, 
+  LayoutExecutorAsync,
+  MinimumNodeSizeStage, 
+  NodeHalo,
   NodeLabelingPolicy,
   OrganicEdgeRouter,
   OrganicLayout,
@@ -55,6 +60,55 @@ import {
   TreeReductionStage,
   VoidNodeStyle
 } from 'yfiles'
+
+
+//@ts-ignore
+import LayoutWorker from "../lib/LayoutWorker.js"
+const layoutWorker = new LayoutWorker()
+
+let _executor:LayoutExecutorAsync|null
+
+export async function runCustomLayoutAsync(graphComponent: GraphComponent, layoutStyle: string, useEdgeBundling?: boolean): Promise<void> {
+  const graph = graphComponent.graph
+  const algorithm = getAlgorithmAsync(layoutStyle, graph, useEdgeBundling);
+
+  const layoutDescriptor = algorithm.layoutDescriptor
+  const layoutData = algorithm.layoutData
+
+  // helper function that performs the actual message passing to the web worker
+  function webWorkerMessageHandler(data: unknown): Promise<any> {
+    return new Promise(resolve => {
+      layoutWorker.onmessage = (e: any) => resolve(e.data)
+      layoutWorker.postMessage(data)
+    })
+  }
+
+  // create an asynchronous layout executor that calculates a layout on the worker
+  const executor = new LayoutExecutorAsync({
+    messageHandler: webWorkerMessageHandler,
+    graphComponent,
+    layoutDescriptor,
+    layoutData,
+    duration: '0.5s',
+    animateViewport: true,
+    easedAnimation: true
+  })
+  _executor = executor
+  // run the Web Worker layout
+  await executor.start()
+  _executor = null
+}
+
+export async function cancelLayout(): Promise<void> {
+  if(_executor !== null) {
+    await _executor.cancel()
+    _executor = null
+    return
+  }
+  else {
+    return
+  }
+}
 
 export async function runCustomLayout(graphComponent: GraphComponent, layoutStyle: string, useEdgeBundling?: boolean) {
   const graph = graphComponent.graph
@@ -77,79 +131,113 @@ export async function runCustomLayout(graphComponent: GraphComponent, layoutStyl
   }
 }
 
-function getAlgorithm(
+/**
+ * Configurations for asynchronous algorithms
+ */
+function getAlgorithmAsync(
   layoutStyle: string,
   graph?: IGraph,
   useEdgeBundling?: boolean
-): { layout: ILayoutAlgorithm; layoutData: LayoutData | null } {
+): { layoutDescriptor: LayoutDescriptor; layoutData: LayoutData | null } {
   switch (layoutStyle) {
     case 'custom-circular':
       return getCustomCircularLayout(graph!, useEdgeBundling)
-    case 'custom-groups-organic':
-      return getCustomGroupsOrganicLayout(graph!, useEdgeBundling)
-    case 'custom-rgl-circular':
-      return getCustomRGLCircularLayout(graph!, useEdgeBundling)
-    case 'custom-rgl-balloon':
-      return getCustomRGLBalloonLayout(graph!, useEdgeBundling)
-    case 'aggregation':
-      return getAggregationLayout(graph!)
     case 'organic':
     default:
       return getOrganicLayout(graph!, useEdgeBundling)
   }
 }
 
+/**
+ * Configurations for synchronous algorithms
+ */
+function getAlgorithm(
+  layoutStyle: string,
+  graph?: IGraph,
+  useEdgeBundling?: boolean
+): { layout: ILayoutAlgorithm; layoutData: LayoutData | null } {
+  switch (layoutStyle) {
+    case 'custom-rgl-circular':
+      return getCustomRGLCircularLayout(graph!, useEdgeBundling)
+    case 'custom-rgl-balloon':
+      return getCustomRGLBalloonLayout(graph!, useEdgeBundling)
+    case 'aggregation':
+      return getAggregationLayout(graph!)
+    case 'custom-groups-organic':
+    default:
+      return getCustomGroupsOrganicLayout(graph!, useEdgeBundling)
+  }
+}
+
 function getOrganicLayout(
   graph: IGraph,
   useBundling?: boolean
-): { layout: ILayoutAlgorithm; layoutData: LayoutData | null } {
-  const layout = new OrganicLayout()
-  layout.preferredEdgeLength = 40
-  layout.minimumNodeDistance = 20
-  layout.compactnessFactor = 0.7
-  layout.qualityTimeRatio = 1
-  layout.starSubstructureStyle = StarSubstructureStyle.RADIAL
-  layout.cycleSubstructureSize = CycleSubstructureStyle.CIRCULAR
-  layout.deterministic = true
+): { layoutDescriptor: LayoutDescriptor; layoutData: LayoutData | null } {
 
-  let layoutData = null
-  if (useBundling) {
-    const edgeBundlingStage = new EdgeBundlingStage()
-    edgeBundlingStage.edgeBundling.bundlingStrength = 0.8
-    edgeBundlingStage.maximumDuration = 30000
-    layout.prependStage(edgeBundlingStage)
-
-    layoutData = createEdgeBundlingData(graph)
+  //Determine the properties for the core layout
+  const organicDescriptor: LayoutDescriptor = {
+    name: 'OrganicLayout', properties: {
+      preferredEdgeLength: 40,
+      minimumNodeDistance: 20,
+      compactnessFactor: 0.7,
+      qualityTimeRatio: 1,
+      starSubstructureStyle: "radial",
+      cycleSubstructureSize: CycleSubstructureStyle.CIRCULAR,
+      deterministic: true
+    }
   }
 
-  return {layout, layoutData}
+  //Custom properties for the edgebundling
+  const edgeBundlingProperties = useBundling? {
+    bundlingStrength: 0.8,
+    maximumDuration: 30000
+  }:{}
+
+  //Wrap it into a custom descriptor
+  const layout:LayoutDescriptor = {
+    name: 'UserDefined',
+    properties: {
+      useEdgeBundling: useBundling,
+      edgeBundlingProperties: edgeBundlingProperties,
+      coreDescriptor: organicDescriptor
+    }
+  }
+  const layoutData = useBundling?createEdgeBundlingData(graph):null
+
+  return {layoutDescriptor: layout, layoutData: layoutData}
 }
 
 function getCustomCircularLayout(
   graph: IGraph,
   useBundling?: boolean
-): { layout: ILayoutAlgorithm; layoutData: LayoutData | null } {
-  const layout = new CircularLayout()
-  layout.layoutStyle = CircularLayoutStyle.BCC_COMPACT
-  layout.partitionStyle = PartitionStyle.DISK
-  layout.singleCycleLayout.minimumNodeDistance = 30
+): { layoutDescriptor: LayoutDescriptor; layoutData: LayoutData | null } {
 
-  layout.balloonLayout.compactnessFactor = 0.9
-  layout.balloonLayout.minimumEdgeLength = 5
-  layout.balloonLayout.preferredChildWedge = 359
-  layout.balloonLayout.allowOverlaps = true
-  layout.balloonLayout.interleavedMode = InterleavedMode.ALL_NODES
-
-  let layoutData = null
-  if (useBundling) {
-    const edgeBundlingStage = new EdgeBundlingStage()
-    edgeBundlingStage.maximumDuration = 10000
-    layout.prependStage(edgeBundlingStage)
-
-    layoutData = createEdgeBundlingData(graph)
+  //Determine the properties for the core layout
+  const circularDescriptor: LayoutDescriptor = {
+    name: 'CircularLayout', properties: {
+      layoutStyle: 'bcc-compact',
+      partitionStyle: 'disk'
+      //The other properties have to be configured on the worker side...
+    }
   }
 
-  return {layout, layoutData}
+  //Custom properties for the edgebundling
+  const edgeBundlingProperties = useBundling? {
+    bundlingStrength: new EdgeBundlingStage().edgeBundling.bundlingStrength,
+    maximumDuration: 10000
+  }:{}
+
+  //Wrap it into a custom descriptor
+  const layout:LayoutDescriptor = {
+    name: 'UserDefined',
+    properties: {
+      useEdgeBundling: useBundling,
+      edgeBundlingProperties: edgeBundlingProperties,
+      coreDescriptor: circularDescriptor
+    }
+  }
+  const layoutData = useBundling?createEdgeBundlingData(graph):null
+  return {layoutDescriptor: layout, layoutData: layoutData}
 }
 
 function getCustomGroupsOrganicLayout(

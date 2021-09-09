@@ -110,6 +110,10 @@
         class="demo-icon-yLayout-bundling"
     ></button>
 
+    <button @click="cancelLayout" title="Cancel a running Layout" class="labeled">
+      Cancel Layout
+    </button>
+
     <span class="spacer"></span>
     <input
       v-model.trim="searchString"
@@ -199,6 +203,10 @@ export default class Toolbar extends Vue {
   private applyLayoutWithBundling(evt:any) {
     eventBus.$emit('applyLayoutWithBundling')
   }
+
+  private cancelLayout() {
+    eventBus.$emit('cancelLayout')
+  }
 }
 </script>
 
@@ -242,6 +250,7 @@ export default class Toolbar extends Vue {
   }
   .labeled {
     color: white;
+    margin-left: 10px;
   }
 
   select {

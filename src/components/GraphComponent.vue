@@ -97,7 +97,7 @@ import {
 import ContextMenu from '../components/ContextMenu.vue'
 import GraphSearch from '../lib/GraphSearch'
 import {FPSMeter} from "@/lib/FPSMeter"
-import {runCustomLayout} from "@/lib/CustomLayout"
+import {cancelLayout, runCustomLayout, runCustomLayoutAsync} from "@/lib/CustomLayout"
 import {HoverManager} from "@/lib/HoverManager"
 import {AggregationGraphWrapper} from "@/lib/AggregationGraphWrapper"
 import {AggregationHelper} from "@/lib/AggregationHelper"
@@ -376,6 +376,11 @@ export default class extends Vue {
     eventBus.$on('toggleWebGLAnimation', (enable:boolean) => {
       this.webGL2Support.animationType = enable?AnimationType.FADE_OUT:AnimationType.HIGHLIGHT
     })
+
+    eventBus.$on('cancelLayout', async () => {
+      await cancelLayout()
+      this.isLoading = false
+    })
   }
 
   private runLayout(useEdgeBundling?: boolean) {
@@ -385,8 +390,8 @@ export default class extends Vue {
     let runAsync = false
     switch (layoutIndex) {
       default:
-      case 0: layoutStyle = 'organic'; break;
-      case 1: layoutStyle = 'custom-circular'; break;
+      case 0: layoutStyle = 'organic'; runAsync = true; break;
+      case 1: layoutStyle = 'custom-circular'; runAsync = true; break;
       case 2: layoutStyle = 'custom-groups-organic'; break;
       case 3: layoutStyle = 'custom-rgl-circular'; break;
       case 4: layoutStyle = 'custom-rgl-balloon'; break;
@@ -408,7 +413,13 @@ export default class extends Vue {
         this.hoverItemHighlightManager.enabled = true
         this.webGL2Support.suspend = false
       }
-      await runCustomLayout(this.graphComponent, layoutStyle, useEdgeBundling)
+      if(runAsync) {
+        //Not all layout configurations can run in asynchronous mode right now
+        await runCustomLayoutAsync(this.graphComponent, layoutStyle, useEdgeBundling)
+      }
+      else {
+        await runCustomLayout(this.graphComponent, layoutStyle, useEdgeBundling)
+      }
       this.isLoading = false
     }, 20)
   }

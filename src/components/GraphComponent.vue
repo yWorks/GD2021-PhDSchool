@@ -96,7 +96,7 @@ export default class extends Vue {
     // instantiate a new GraphComponent
     this.graphComponent = new GraphComponent('#graph-component')
 
-    this.graphComponent.inputMode = new GraphEditorInputMode()
+    this.graphComponent.inputMode = this.configureInput()
 
     this.graphComponent.graph = await loadGraph()
 
@@ -124,6 +124,25 @@ export default class extends Vue {
 
     // center the newly created graph
     this.graphComponent.fitGraphBounds()
+  }
+
+  private configureInput():GraphEditorInputMode {
+    //Configure input to better match our requirements
+    this.graphComponent.focusIndicatorManager.enabled = false
+
+    const graphEditorInputMode = new GraphEditorInputMode();
+    //Disallow bend creation and don't show bend handles
+    graphEditorInputMode.showHandleItems = GraphItemTypes.NODE | GraphItemTypes.PORT
+    graphEditorInputMode.allowCreateBend = false
+    //Allow selection and click only for nodes
+    graphEditorInputMode.marqueeSelectableItems = GraphItemTypes.NODE
+    graphEditorInputMode.selectableItems = GraphItemTypes.NODE
+    graphEditorInputMode.clickableItems = GraphItemTypes.NODE
+    //Disallow node creation and deletion
+    graphEditorInputMode.allowCreateNode = false
+    graphEditorInputMode.deletableItems = GraphItemTypes.NONE
+    graphEditorInputMode.allowEditLabel = false
+    return graphEditorInputMode
   }
 
   private registerToolbarEvents() {
@@ -195,8 +214,8 @@ export default class extends Vue {
   private initializeTooltips() {
     const inputMode = this.graphComponent.inputMode as GraphInputMode
 
-    // show tooltips only for nodes and edges
-    inputMode.toolTipItems = GraphItemTypes.NODE | GraphItemTypes.EDGE
+    // show tooltips only for nodes
+    inputMode.toolTipItems = GraphItemTypes.NODE
 
     // Customize the tooltip's behavior to our liking.
     const mouseHoverInputMode = inputMode.mouseHoverInputMode
@@ -228,20 +247,10 @@ export default class extends Vue {
   private createTooltipContent(item: IModelItem): HTMLElement {
     const vueTooltipComponent = Vue.extend(Tooltip)
 
-    let itemNr = -1
-    if (INode.isInstance(item)) {
-      itemNr = this.graphComponent.graph.nodes.indexOf(item) + 1
-    } else if (IEdge.isInstance(item)) {
-      // there should be only nodes and edges due to inputMode.tooltipItems
-      itemNr = this.graphComponent.graph.edges.indexOf(item) + 1
-    }
-
     const vueTooltip = new vueTooltipComponent({
       data: {
-        title: INode.isInstance(item) ? 'Node Tooltip' : 'Edge Tooltip',
-        content: INode.isInstance(item)
-          ? `Node no. ${itemNr}`
-          : `Edge no. ${itemNr}`,
+        title: 'Node data:',
+        content: item.tag.label,
       },
     })
 

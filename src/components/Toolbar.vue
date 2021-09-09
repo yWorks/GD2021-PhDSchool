@@ -79,8 +79,10 @@
       class="demo-icon-yIconZoomFit"
     ></button>
     <span class="separator"></span>
+    <span class="labeled">Rendering Mode: </span>
     <toggle-button @change="toggleWebGL" :labels="{checked: 'WebGL2', unchecked: 'SVG'}" :width="70"/>
-    <span class="labeled">Current FPS: {{fps}}</span>
+    <span class="labeled">Automatic Render Mode: </span>
+    <toggle-button @change="toggleAutoWebGL" :labels="true" :width="70"/>
 
     <span class="spacer"></span>
     <input
@@ -145,7 +147,11 @@ export default class Toolbar extends Vue {
   private toggleWebGL(evt:any) {
     eventBus.$emit('toggleWebGL', evt.value)
   }
-  
+
+  private toggleAutoWebGL(evt:any) {
+    eventBus.$emit('toggleAutoWebGL', evt.value)
+  }
+
   private exportDiagram(format: 'svg' | 'png' | 'pdf') {
     let exportFormat = ExportFormat.SVG
     if (format === 'png') {

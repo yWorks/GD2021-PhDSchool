@@ -118,7 +118,7 @@ export default class extends Vue {
     this.graphComponent.graph = await loadGraph()
 
     this.webGL2Support = new WebGL2Support(this.graphComponent)
-    this.webGL2Support.initialize()
+    await this.webGL2Support.initialize()
 
     this.enableHighlights()
 

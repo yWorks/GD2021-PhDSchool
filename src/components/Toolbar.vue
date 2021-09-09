@@ -83,7 +83,7 @@
     <toggle-button @change="toggleWebGL" :labels="{checked: 'WebGL2', unchecked: 'SVG'}" :width="70"/>
     <span class="labeled">Automatic Render Mode: </span>
     <toggle-button @change="toggleAutoWebGL" :labels="true" :width="70"/>
-
+    <span class="labeled">Current FPS: {{fps}}</span>
     <span class="spacer"></span>
     <input
       v-model.trim="searchString"

@@ -59,6 +59,7 @@ import {
   StrokeConvertible,
 } from 'yfiles'
 import { VuejsNodeStyle } from './VuejsNodeStyle'
+import { LevelOfDetailNodeStyle } from './LevelOfDetailNodeStyle'
 import type { LabelConfiguration } from './GraphBuilderUtils'
 import {
   asLayoutParameterForEdges,
@@ -107,6 +108,7 @@ export type NodeStyle =
   | 'ImageNodeStyle'
   | 'TemplateNodeStyle'
   | 'VueJSNodeStyle'
+  | 'LevelOfDetail'
 
 export type EdgesSourceDataConfiguration<T> = {
   idProvider: IdProvider<T> | null
@@ -189,6 +191,25 @@ export function buildNodeCreator<T = any>(
           stroke: null,
           fill: null,
         })
+      }
+    }
+  } else if (configuration.styleProvider === 'LevelOfDetail') {
+    //Additional VueJS/LoD wrapper
+    // use an elliptical shape for the node outline to match the template shape
+    const outlinePath = new GeneralPath()
+    // the path is interpreted as normalized - spanning from 0/0 to 1/1
+    outlinePath.appendEllipse(new Rect(0, 0, 1, 1), true)
+    const vuejsNodeStyle = new VuejsNodeStyle(configuration.template || '<g/>')
+    vuejsNodeStyle.normalizedOutline = outlinePath
+
+    const shapeBinding = configuration.shape
+    if (shapeBinding) {
+      nodeCreator.styleProvider = (item: any) => {
+        return new LevelOfDetailNodeStyle(vuejsNodeStyle, new ShapeNodeStyle({
+          shape: shapeBinding(item),
+          stroke: configuration.stroke?configuration.stroke(item):null,
+          fill: configuration.fill?configuration.fill(item):null,
+        }))
       }
     }
   } else if (configuration.styleProvider === 'VueJSNodeStyle') {

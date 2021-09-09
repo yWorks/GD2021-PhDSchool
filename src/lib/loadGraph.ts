@@ -29,6 +29,7 @@
 import { project } from './Projection'
 import { analyze } from './Analytics'
 import { httpRequest } from './WebLoader'
+import { LevelOfDetailLabelStyle } from './LevelOfDetailLabelStyle'
 import {
   buildEdgeCreator,
   buildEdgesSourceData,
@@ -96,13 +97,13 @@ export default async function loadGraph() {
     height: new Function(
       'with(arguments[0]) { return (30 + (800 - 30)*((tag.connections - 1) / (310 - 1))) }'
     ) as (...args: any[]) => any,
-    styleProvider: 'VueJSNodeStyle',
+    styleProvider: 'LevelOfDetail',
     fill: (item) => `${item.tag.color}`,
     shape: () => 'ellipse',
     stroke: () => '1px white',
     image: null,
     template:
-      '<g>\n  <template v-if="zoom >= 0.1">\n    <ellipse fill="white"\n             :cx="layout.width*0.5" :cy="layout.height*0.5"\n             :rx="layout.width*0.5" :ry="layout.height*0.5">\n    </ellipse>  \n  </template>  \n  <ellipse :fill="tag.color"\n           :cx="layout.width*0.5" :cy="layout.height*0.5"\n           :rx="layout.width*0.49" :ry="layout.height*0.49">\n  </ellipse>  \n  <template v-if="zoom >= 0.1">\n    <image :xlink:href="\'https://yworks-live3.com/phd-school/flags/\' + tag.label + \'.svg\'" :x="layout.width*0.25" :y="layout.height*0.15" :width="layout.width*0.5"></image>\n  </template>  \n</g>',
+        '<g>\n  <ellipse fill="white"\n             :cx="layout.width*0.5" :cy="layout.height*0.5"\n             :rx="layout.width*0.5" :ry="layout.height*0.5">\n    </ellipse>  \n  <ellipse :fill="tag.color"\n           :cx="layout.width*0.5" :cy="layout.height*0.5"\n           :rx="layout.width*0.49" :ry="layout.height*0.49">\n  </ellipse>  \n  <image :xlink:href="\'https://yworks-live3.com/phd-school/flags/\' + tag.label + \'.svg\'" :x="layout.width*0.25" :y="layout.height*0.15" :width="layout.width*0.5"></image>  \n</g>',
   })
   const nodesSource = await buildNodesSourceData(
     { data: out2, nodeCreator },
@@ -123,7 +124,7 @@ export default async function loadGraph() {
           const fontSize = style.textSize
           const desiredWidth = (<INode>label.owner).layout.width*0.5
           const actualWidth = label.layout.width
-          const newFontSize = Math.max(6, fontSize*desiredWidth/actualWidth)
+          const newFontSize = fontSize*desiredWidth/actualWidth
           const newStyle = style.clone()
           newStyle.textSize = newFontSize
           graph.setStyle(label, newStyle)
@@ -156,6 +157,13 @@ export default async function loadGraph() {
     gridColumns: null,
     gridRows: null,
   })
+
+  //Wrap all labels into LoD wrapper
+  graph.labels.filter(l => !(l.style instanceof LevelOfDetailLabelStyle)).forEach(
+      label => {
+        graph.setStyle(label, new LevelOfDetailLabelStyle(label.style, VoidLabelStyle.INSTANCE))
+      }
+  )
 
   //We don't use arrows and edge labels and thus can save A LOT of time just not using the very expensive edge cropping at the outline
   const cropper = new DefaultEdgePathCropper()

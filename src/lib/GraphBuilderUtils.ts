@@ -30,11 +30,13 @@ import {
   DefaultLabelStyle,
   Fill,
   FillConvertible,
+  FreeNodeLabelModel,
   ILabelModelParameter,
   InteriorLabelModel,
   LabelCreator,
   NinePositionsEdgeLabelModel,
   ObjectBindings,
+  Point
 } from 'yfiles'
 
 export enum LabelPlacement {
@@ -91,7 +93,9 @@ export function asLayoutParameterForNodes(placement: string) {
     case LabelPlacement.BottomRight:
       return InteriorLabelModel.SOUTH_EAST
     default:
-      return InteriorLabelModel.CENTER
+      //We interpret this as a specification for the FreeNodeLabelModel, with the label centered on the given relative locations
+      //@ts-ignore
+      return FreeNodeLabelModel.INSTANCE.createParameter(JSON.parse(placement), Point.ORIGIN, new Point(0.5, 0.5))
   }
 }
 

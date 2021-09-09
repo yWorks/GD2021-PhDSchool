@@ -63,14 +63,6 @@ export default async function loadGraph() {
   const data = value ? JSON.parse(value) : {}
   const out = await project(data, { binding: (item) => item.edgeList })
   const out2 = await project(data, { binding: (item) => item.nodeList })
-  const labelConfiguration = await buildLabelConfiguration({
-    labelsBinding: null,
-    textBinding: new Function(
-      'with(arguments[0]) { return ("Louvain: "+louvain) }'
-    ) as (...args: any[]) => any,
-    placement: () => 'bottom',
-    fill: () => 'red',
-  })
   const edgeCreator = await buildEdgeCreator(undefined, {
     tagProvider: (item) => item.tag,
     stroke: (item) => `${item.tag.thickness}px ${item.tag.color}`,
@@ -89,7 +81,7 @@ export default async function loadGraph() {
   const labelConfiguration2 = await buildLabelConfiguration({
     labelsBinding: (item) => item.labels,
     textBinding: (item) => item.text,
-    placement: () => 'center',
+    placement: () => '[0.5,0.75]',
     fill: null,
   })
   const nodeCreator = await buildNodeCreator([labelConfiguration2], {
@@ -120,8 +112,27 @@ export default async function loadGraph() {
     nodesSources: [nodesSource],
     edgesSources: [edgesSource],
   })
+
+  //Adjust node labels for the countries
+  //so that they are scaled nicely
+  graph.nodeLabels.filter(l => !l.text.startsWith("Louvain:")).forEach(
+      (label) =>
+      {
+        const style = label.style as DefaultLabelStyle
+        if(style) {
+          const fontSize = style.textSize
+          const desiredWidth = (<INode>label.owner).layout.width*0.5
+          const actualWidth = label.layout.width
+          const newFontSize = Math.max(6, fontSize*desiredWidth/actualWidth)
+          const newStyle = style.clone()
+          newStyle.textSize = newFontSize
+          graph.setStyle(label, newStyle)
+        }
+      }
+  )
+
   const out3 = await analyze(
-    { in: graph, labelConfigurations: [labelConfiguration] },
+    { in: graph },
     {
       resultPropertyName: 'louvain',
       clusterCount: 3,

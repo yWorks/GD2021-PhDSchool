@@ -34,6 +34,7 @@ import {
   EdgePathLabelModel,
   Fill,
   FillConvertible,
+  GeneralPath,
   GraphBuilder,
   IArrow,
   IdProviderConvertible,
@@ -191,7 +192,12 @@ export function buildNodeCreator<T = any>(
       }
     }
   } else if (configuration.styleProvider === 'VueJSNodeStyle') {
+    // use an elliptical shape for the node outline to match the template shape
+    const outlinePath = new GeneralPath()
+    // the path is interpreted as normalized - spanning from 0/0 to 1/1
+    outlinePath.appendEllipse(new Rect(0, 0, 1, 1), true)
     const vuejsNodeStyle = new VuejsNodeStyle(configuration.template || '<g/>')
+    vuejsNodeStyle.normalizedOutline = outlinePath
     nodeCreator.styleProvider = () => vuejsNodeStyle
   } else if (configuration.styleProvider === 'TemplateNodeStyle') {
     const stringTemplateNodeStyle = new StringTemplateNodeStyle({

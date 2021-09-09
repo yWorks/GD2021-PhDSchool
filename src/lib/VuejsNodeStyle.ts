@@ -33,6 +33,9 @@ import {
   Font,
   FontStyle,
   FontWeight,
+  GeneralPath,
+  GeomUtilities,
+  Point,
   GraphComponent,
   GraphMLAttribute,
   ILookup,
@@ -50,6 +53,8 @@ import {
   TypeAttribute,
   XamlAttributeWritePolicy,
   YString,
+  IRectangle,
+  Matrix,
 } from 'yfiles'
 import Vue from 'vue'
 
@@ -110,15 +115,15 @@ class ObservedContext {
     const oldState = this.observed
     this.observed = {}
     if (
-      oldState &&
-      [
-        'tag',
-        'layout',
-        'zoom',
-        'selected',
-        'highlighted',
-        'focused',
-      ].some((name) => oldState.hasOwnProperty(name))
+        oldState &&
+        [
+          'tag',
+          'layout',
+          'zoom',
+          'selected',
+          'highlighted',
+          'focused',
+        ].some((name) => oldState.hasOwnProperty(name))
     ) {
       return oldState
     }
@@ -141,10 +146,10 @@ class ObservedContext {
       }
       const oldLayout = oldState.layout!
       if (
-        newValue.x !== oldLayout.x ||
-        newValue.y !== oldLayout.y ||
-        newValue.width !== oldLayout.width ||
-        newValue.height !== oldLayout.height
+          newValue.x !== oldLayout.x ||
+          newValue.y !== oldLayout.y ||
+          newValue.width !== oldLayout.width ||
+          newValue.height !== oldLayout.height
       ) {
         delta.layout = newValue
         change = true
@@ -166,7 +171,7 @@ class ObservedContext {
     }
     if (oldState.hasOwnProperty('selected')) {
       const newValue = this.graphComponent.selection.selectedNodes.isSelected(
-        this.node
+          this.node
       )
       if (newValue !== oldState.selected) {
         delta.selected = newValue
@@ -175,7 +180,7 @@ class ObservedContext {
     }
     if (oldState.hasOwnProperty('highlighted')) {
       const newValue = this.graphComponent.highlightIndicatorManager.selectionModel!.isSelected(
-        this.node
+          this.node
       )
       if (newValue !== oldState.highlighted) {
         delta.highlighted = newValue
@@ -184,7 +189,7 @@ class ObservedContext {
     }
     if (oldState.hasOwnProperty('focused')) {
       const newValue =
-        this.graphComponent.focusIndicatorManager.focusedItem === this.node
+          this.graphComponent.focusIndicatorManager.focusedItem === this.node
       if (newValue !== oldState.focused) {
         delta.focused = newValue
         change = true
@@ -241,7 +246,7 @@ class ObservedContext {
       return this.observed.selected!
     }
     return (this.observed.selected = this.graphComponent.selection.selectedNodes.isSelected(
-      this.node
+        this.node
     ))
   }
 
@@ -253,7 +258,7 @@ class ObservedContext {
       return this.observed.highlighted!
     }
     return (this.observed.highlighted = this.graphComponent.highlightIndicatorManager.selectionModel!.isSelected(
-      this.node
+        this.node
     ))
   }
 
@@ -265,7 +270,7 @@ class ObservedContext {
       return this.observed.focused!
     }
     return (this.observed.focused =
-      this.graphComponent.focusIndicatorManager.focusedItem === this.node)
+        this.graphComponent.focusIndicatorManager.focusedItem === this.node)
   }
 
   /**
@@ -294,10 +299,25 @@ type DataMap = {
 export class VuejsNodeStyle extends NodeStyleBase {
   private _template = ''
   private constructorFunction: any
+  private _normalizedOutline: GeneralPath|null = null
 
   constructor(template: string) {
     super()
     this.template = template
+  }
+
+  /**
+   * Gets the normalized outline of a node that will be displayed using the created visual.
+   */
+  get normalizedOutline(): GeneralPath|null {
+    return this._normalizedOutline
+  }
+
+  /**
+   * Sets the normalized outline of a node that will be displayed using the created visual.
+   */
+  set normalizedOutline(outline: GeneralPath|null) {
+    this._normalizedOutline = outline
   }
 
   /**
@@ -450,14 +470,37 @@ export class VuejsNodeStyle extends NodeStyleBase {
     return svgVisual
   }
 
+
+  /**
+   * Gets the outline of the node, based on the normalized outline.
+   * @see Overrides {@link NodeStyleBase#getOutline}
+   */
+  getOutline(node: INode): GeneralPath|null {
+    const outline = this.scaleOutline(this.normalizedOutline, node.layout)
+    if(outline) {
+      return outline
+    }
+    return super.getOutline(node);
+  }
+
+  /** Safely scale the outline */
+  private scaleOutline(normalizePath:GeneralPath|null, layout:IRectangle): GeneralPath|null {
+    if(!normalizePath) {
+      return null
+    }
+    //Scale and translate by the node's layout
+    const matrix = new Matrix(layout.width, 0, 0, layout.height, layout.topLeft.x, layout.topLeft.y)
+    return normalizePath.createTransformedPath(matrix)
+  }
+
   /**
    * Updates the visual by returning the old visual, as Vuejs handles updating the component.
    * @see Overrides {@link LabelStyleBase#updateVisual}
    */
   updateVisual(
-    context: IRenderContext,
-    oldVisual: SvgVisual,
-    node: INode
+      context: IRenderContext,
+      oldVisual: SvgVisual,
+      node: INode
   ): SvgVisual {
     if (oldVisual.svgElement) {
       const component = (oldVisual.svgElement as any)['data-vueComponent']
@@ -466,12 +509,12 @@ export class VuejsNodeStyle extends NodeStyleBase {
         const observedContext = yfilesContext.observedContext
         observedContext.update(context)
         if (
-          observedContext &&
-          observedContext.changes &&
-          !observedContext.updatePending
+            observedContext &&
+            observedContext.changes &&
+            !observedContext.updatePending
         ) {
           const { change } = observedContext.checkModification(
-            observedContext.changes
+              observedContext.changes
           )
           if (change) {
             observedContext.updatePending = true
@@ -500,11 +543,11 @@ export class VuejsNodeStyle extends NodeStyleBase {
    * Prepares the Vuejs component for rendering.
    */
   prepareVueComponent(
-    component: object & {
-      yFilesContext: { observedContext?: ObservedContext }
-    },
-    context: IRenderContext,
-    node: INode
+      component: object & {
+        yFilesContext: { observedContext?: ObservedContext }
+      },
+      context: IRenderContext,
+      node: INode
   ): void {
     const yFilesContext = {}
 
@@ -524,11 +567,11 @@ export class VuejsNodeStyle extends NodeStyleBase {
    * Updates the Vuejs component for rendering.
    */
   updateVueComponent(
-    component: object & {
-      yFilesContext: { observedContext?: ObservedContext }
-    },
-    context: IRenderContext,
-    node: INode
+      component: object & {
+        yFilesContext: { observedContext?: ObservedContext }
+      },
+      context: IRenderContext,
+      node: INode
   ): void {
     const yFilesContext = {}
 
@@ -565,21 +608,21 @@ function initializeDesignerVueComponents(): void {
   }
 
   function addText(
-    value: string,
-    w: string | number,
-    h: string | number,
-    fontFamily: string,
-    fontSize: string | number,
-    fontWeight: string | number,
-    fontStyle: string | number,
-    textDecoration: string | number,
-    lineSpacing: string | number,
-    wrapping: string | number,
-    textElement: SVGElement
+      value: string,
+      w: string | number,
+      h: string | number,
+      fontFamily: string,
+      fontSize: string | number,
+      fontWeight: string | number,
+      fontStyle: string | number,
+      textDecoration: string | number,
+      lineSpacing: string | number,
+      wrapping: string | number,
+      textElement: SVGElement
   ): SVGElement | null {
     if (
-      textElement.nodeType !== Node.ELEMENT_NODE ||
-      textElement.nodeName !== 'text'
+        textElement.nodeType !== Node.ELEMENT_NODE ||
+        textElement.nodeName !== 'text'
     ) {
       return null
     }
@@ -640,44 +683,44 @@ function initializeDesignerVueComponents(): void {
     // do the text wrapping
     // This sample uses the strategy CHARACTER_ELLIPSIS. You can use any other setting.
     TextRenderSupport.addText(
-      textElement,
-      text,
-      font,
-      new Size(Number(w), Number(h)),
-      textWrapping
+        textElement,
+        text,
+        font,
+        new Size(Number(w), Number(h)),
+        textWrapping
     )
 
     return textElement
   }
 
   function updateText(
-    value: string,
-    w: string | number,
-    h: string | number,
-    fontFamily: string,
-    fontSize: string | number,
-    fontWeight: string | number,
-    fontStyle: string | number,
-    textDecoration: string | number,
-    lineSpacing: string | number,
-    wrapping: string | number,
-    textElement: SVGElement
+      value: string,
+      w: string | number,
+      h: string | number,
+      fontFamily: string,
+      fontSize: string | number,
+      fontWeight: string | number,
+      fontStyle: string | number,
+      textDecoration: string | number,
+      lineSpacing: string | number,
+      wrapping: string | number,
+      textElement: SVGElement
   ) {
     while (textElement.firstChild) {
       textElement.removeChild(textElement.firstChild)
     }
     addText(
-      value,
-      w,
-      h,
-      fontFamily,
-      fontSize,
-      fontWeight,
-      fontStyle,
-      textDecoration,
-      lineSpacing,
-      wrapping,
-      textElement
+        value,
+        w,
+        h,
+        fontFamily,
+        fontSize,
+        fontWeight,
+        fontStyle,
+        textDecoration,
+        lineSpacing,
+        wrapping,
+        textElement
     )
   }
 
@@ -723,7 +766,7 @@ function initializeDesignerVueComponents(): void {
       <g v-if="visible" :transform="$transform">
       <g v-if="clipped" :transform="'translate('+x+' '+y+')'">
         <text dy="1em" :transform="'translate('+$dx+' 0)'" :text-anchor="$textAnchor"
-          :clip-path="'url(#'+refId+')'" :fill="fill" :opacity="opacity">{{ content }}
+              :clip-path="'url(#'+refId+')'" :fill="fill" :opacity="opacity">{{ content }}
         </text>
         <clipPath :id="refId">
           <rect :width="width" :height="height" :x="-$dx"></rect>
@@ -731,7 +774,7 @@ function initializeDesignerVueComponents(): void {
       </g>
       <g v-else :transform="'translate('+x+' '+y+')'">
         <text dy="1em" :transform="'translate('+$dx+' 0)'" :text-anchor="$textAnchor" :fill="fill"
-          :opacity="opacity">{{ content }}
+              :opacity="opacity">{{ content }}
         </text>
       </g>
       </g>`,
@@ -740,63 +783,63 @@ function initializeDesignerVueComponents(): void {
     },
     mounted() {
       addText(
-        this.content,
-        this.width,
-        this.height,
-        this.fontFamily,
-        this.fontSize,
-        this.fontWeight,
-        this.fontStyle,
-        this.textDecoration,
-        this.lineSpacing,
-        this.wrapping,
-        this.$el.querySelector('text')!
+          this.content,
+          this.width,
+          this.height,
+          this.fontFamily,
+          this.fontSize,
+          this.fontWeight,
+          this.fontStyle,
+          this.textDecoration,
+          this.lineSpacing,
+          this.wrapping,
+          this.$el.querySelector('text')!
       )
     },
     watch: {
       width(this: TextDataType): void {
         updateText(
-          this.content,
-          this.width,
-          this.height,
-          this.fontFamily,
-          this.fontSize,
-          this.fontWeight,
-          this.fontStyle,
-          this.textDecoration,
-          this.lineSpacing,
-          this.wrapping,
-          this.$el.querySelector('text')!
+            this.content,
+            this.width,
+            this.height,
+            this.fontFamily,
+            this.fontSize,
+            this.fontWeight,
+            this.fontStyle,
+            this.textDecoration,
+            this.lineSpacing,
+            this.wrapping,
+            this.$el.querySelector('text')!
         )
       },
       height(this: TextDataType): void {
         updateText(
-          this.content,
-          this.width,
-          this.height,
-          this.fontFamily,
-          this.fontSize,
-          this.fontWeight,
-          this.fontStyle,
-          this.textDecoration,
-          this.lineSpacing,
-          this.wrapping,
-          this.$el.querySelector('text')!
+            this.content,
+            this.width,
+            this.height,
+            this.fontFamily,
+            this.fontSize,
+            this.fontWeight,
+            this.fontStyle,
+            this.textDecoration,
+            this.lineSpacing,
+            this.wrapping,
+            this.$el.querySelector('text')!
         )
       },
       content(this: TextDataType): void {
         updateText(
-          this.content,
-          this.width,
-          this.height,
-          this.fontFamily,
-          this.fontSize,
-          this.fontWeight,
-          this.fontStyle,
-          this.textDecoration,
-          this.lineSpacing,
-          this.wrapping,
-          this.$el.querySelector('text')!
+            this.content,
+            this.width,
+            this.height,
+            this.fontFamily,
+            this.fontSize,
+            this.fontWeight,
+            this.fontStyle,
+            this.textDecoration,
+            this.lineSpacing,
+            this.wrapping,
+            this.$el.querySelector('text')!
         )
       },
     },
@@ -896,15 +939,15 @@ function initializeDesignerVueComponents(): void {
     computed: {
       $dx(this: TextPropsType): number {
         return this.align === 'end'
-          ? Number(this.width)
-          : this.align === 'middle'
-          ? Number(this.width) * 0.5
-          : 0
+            ? Number(this.width)
+            : this.align === 'middle'
+                ? Number(this.width) * 0.5
+                : 0
       },
       $textAnchor(this: TextPropsType): string | boolean {
         return this.align === 'end' || this.align === 'middle'
-          ? this.align
-          : false
+            ? this.align
+            : false
       },
       $transform(this: TextPropsType): string | boolean {
         return this.transform || ''
@@ -929,7 +972,7 @@ function initializeDesignerVueComponents(): void {
 
   Vue.component('svg-rect', {
     template:
-      '<rect :transform="$transform" :x="x" :y="y" :width="width" :height="height" :rx="cornerRadius" :fill="fill" :stroke="stroke" :stroke-width="strokeWidth" :stroke-dasharray="strokeDasharray" :opacity="opacity" v-if="visible"></rect>',
+        '<rect :transform="$transform" :x="x" :y="y" :width="width" :height="height" :rx="cornerRadius" :fill="fill" :stroke="stroke" :stroke-width="strokeWidth" :stroke-dasharray="strokeDasharray" :opacity="opacity" v-if="visible"></rect>',
     props: {
       x: {
         type: [String, Number],
@@ -1001,7 +1044,7 @@ function initializeDesignerVueComponents(): void {
 
   Vue.component('svg-ellipse', {
     template:
-      '<ellipse :transform="$transform" :cx="$cx" :cy="$cy" :rx="$rx" :ry="$ry" :fill="fill" :stroke="stroke" :stroke-width="strokeWidth" :stroke-dasharray="strokeDasharray" :opacity="opacity" v-if="visible"></ellipse>',
+        '<ellipse :transform="$transform" :cx="$cx" :cy="$cy" :rx="$rx" :ry="$ry" :fill="fill" :stroke="stroke" :stroke-width="strokeWidth" :stroke-dasharray="strokeDasharray" :opacity="opacity" v-if="visible"></ellipse>',
     props: {
       x: {
         type: [String, Number],
@@ -1080,7 +1123,7 @@ function initializeDesignerVueComponents(): void {
 
   Vue.component('svg-image', {
     template:
-      '<image :transform="$transform" :x="x" :y="y" :width="width" :height="height" v-bind="{\'xlink:href\':src}" :opacity="opacity" v-if="visible"></image>',
+        '<image :transform="$transform" :x="x" :y="y" :width="width" :height="height" v-bind="{\'xlink:href\':src}" :opacity="opacity" v-if="visible"></image>',
     props: {
       x: {
         type: [String, Number],
@@ -1161,12 +1204,12 @@ export class VuejsNodeStyleMarkupExtension extends MarkupExtension {
   provideValue(serviceProvider: ILookup) {
     // Replace clipIds from neo4j with localIds. We want to get rid of clipId in the long run.
     let template = this._template.replace(
-      /(v-bind:clip-path=.*?)'url\(#'\+clipId\+'\)'/,
-      "$1localUrl('neo4j-node-clip')"
+        /(v-bind:clip-path=.*?)'url\(#'\+clipId\+'\)'/,
+        "$1localUrl('neo4j-node-clip')"
     )
     template = template.replace(
-      /(clipPath v-bind:id=.*?)clipId/,
-      "$1localId('neo4j-node-clip')"
+        /(clipPath v-bind:id=.*?)clipId/,
+        "$1localId('neo4j-node-clip')"
     )
 
     return new VuejsNodeStyle(template)

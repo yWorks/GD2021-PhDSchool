@@ -38,6 +38,7 @@ import {
   buildNodesSourceData,
 } from './GraphBuilder'
 import { arrange } from './Layout'
+import { DefaultLabelStyle, INode, VoidLabelStyle, DefaultEdgePathCropper } from 'yfiles'
 
 /**
  * This is automatically generated source code. It is largely undocumented and not necessarily
@@ -144,6 +145,11 @@ export default async function loadGraph() {
     gridColumns: null,
     gridRows: null,
   })
+
+  //We don't use arrows and edge labels and thus can save A LOT of time just not using the very expensive edge cropping at the outline
+  const cropper = new DefaultEdgePathCropper()
+  cropper.cropAtPort = true
+  graph.decorator.portDecorator.edgePathCropperDecorator.setImplementation(cropper)
 
   return out4
 }

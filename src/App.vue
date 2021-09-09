@@ -50,6 +50,9 @@ import { Component, Provide, Vue } from 'vue-property-decorator'
 import GraphComponent from './components/GraphComponent.vue'
 import Toolbar from './components/Toolbar.vue'
 import UserInputDialog from './components/UserInputDialog.vue'
+import ToggleButton from 'vue-js-toggle-button'
+
+Vue.use(ToggleButton)
 
 @Component({
   components: {

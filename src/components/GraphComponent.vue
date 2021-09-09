@@ -54,22 +54,25 @@ import {
   GraphInputMode,
   GraphItemTypes,
   GraphMLSupport,
+  GraphModelManager,
   HighlightIndicatorManager,
   NodeStyleDecorationInstaller,
   PolylineEdgeStyle,
-
   ICommand,
   IEdge,
   IModelItem,
   INode,
   License,
   Point,
+  SelectionIndicatorManager,
   ShapeNodeShape,
   ShapeNodeStyle,
   StorageLocation,
   Stroke,
   StyleDecorationZoomPolicy,
-  TimeSpan
+  TimeSpan,
+  WebGL2GraphModelManager,
+  WebGL2SelectionIndicatorManager
 } from 'yfiles'
 import loadGraph from '../lib/loadGraph'
 import licenseData from '../license.json'
@@ -89,6 +92,8 @@ License.value = licenseData
 @Component({ components: { ContextMenu } })
 export default class extends Vue {
   private graphComponent!: GraphComponent
+  private unoptimizedModelManager!: GraphModelManager
+  private selectionManager!: SelectionIndicatorManager<IModelItem>
 
   private graphSearch!: GraphSearch
   private $query!: string
@@ -111,6 +116,8 @@ export default class extends Vue {
   async mounted() {
     // instantiate a new GraphComponent
     this.graphComponent = new GraphComponent('#graph-component')
+    this.unoptimizedModelManager = this.graphComponent.graphModelManager
+    this.selectionManager = this.graphComponent.selectionIndicatorManager
 
     this.graphComponent.inputMode = this.configureInput()
     this.mainFrameRate = new FPSMeter()
@@ -144,6 +151,17 @@ export default class extends Vue {
 
     // center the newly created graph
     this.graphComponent.fitGraphBounds()
+  }
+
+  private toggleWebGL2(enable:boolean) {
+    if(enable) {
+      this.graphComponent.graphModelManager = new WebGL2GraphModelManager()
+      this.graphComponent.selectionIndicatorManager = new WebGL2SelectionIndicatorManager(this.graphComponent)
+    }
+    else {
+      this.graphComponent.graphModelManager = this.unoptimizedModelManager
+      this.graphComponent.selectionIndicatorManager = this.selectionManager
+    }
   }
 
   private enableHighlights() {
@@ -307,6 +325,9 @@ export default class extends Vue {
     eventBus.$on('search-query-input', (query: string) => {
       this.$query = query
       this.updateSearch()
+    })
+    eventBus.$on('toggleWebGL', (enable:boolean) => {
+      this.toggleWebGL2(enable)
     })
   }
 

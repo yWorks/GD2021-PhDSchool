@@ -78,6 +78,8 @@
       title="Fit Graph Bounds"
       class="demo-icon-yIconZoomFit"
     ></button>
+    <span class="separator"></span>
+    <toggle-button @change="toggleWebGL" :labels="{checked: 'WebGL2', unchecked: 'SVG'}" :width="70"/>
     <span class="labeled">Current FPS: {{fps}}</span>
 
     <span class="spacer"></span>
@@ -139,6 +141,11 @@ export default class Toolbar extends Vue {
   private save() {
     eventBus.$emit('save')
   }
+
+  private toggleWebGL(evt:any) {
+    eventBus.$emit('toggleWebGL', evt.value)
+  }
+  
   private exportDiagram(format: 'svg' | 'png' | 'pdf') {
     let exportFormat = ExportFormat.SVG
     if (format === 'png') {

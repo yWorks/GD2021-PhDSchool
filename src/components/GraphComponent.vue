@@ -45,19 +45,31 @@
 import { Component, Inject, Vue } from 'vue-property-decorator'
 import { eventBus } from '@/main'
 import {
+  Arrow,
+  ArrowType,
+  Color,
+  EdgeStyleDecorationInstaller,
   GraphComponent,
   GraphEditorInputMode,
   GraphInputMode,
   GraphItemTypes,
   GraphMLSupport,
+  HighlightIndicatorManager,
+  NodeStyleDecorationInstaller,
+  PolylineEdgeStyle,
+
   ICommand,
   IEdge,
   IModelItem,
   INode,
   License,
   Point,
+  ShapeNodeShape,
+  ShapeNodeStyle,
   StorageLocation,
-  TimeSpan,
+  Stroke,
+  StyleDecorationZoomPolicy,
+  TimeSpan
 } from 'yfiles'
 import loadGraph from '../lib/loadGraph'
 import licenseData from '../license.json'
@@ -70,6 +82,7 @@ import {
 import ContextMenu from '../components/ContextMenu.vue'
 import GraphSearch from '../lib/GraphSearch'
 import {FPSMeter} from "@/lib/FPSMeter"
+import {HoverManager} from "@/lib/HoverManager";
 
 License.value = licenseData
 
@@ -80,7 +93,8 @@ export default class extends Vue {
   private graphSearch!: GraphSearch
   private $query!: string
   private mainFrameRate!: FPSMeter
-  
+  private hoverItemHighlightManager!: HighlightIndicatorManager<IModelItem> 
+  private hoverManager!: HoverManager 
   contextMenuActions: { title: string; action: () => void }[] = [
     {
       title: 'Context Menu',
@@ -103,6 +117,8 @@ export default class extends Vue {
     this.mainFrameRate.registerFPSCounter(this.graphComponent)
     
     this.graphComponent.graph = await loadGraph()
+
+    this.enableHighlights()
 
     this.graphComponent.graph.undoEngineEnabled = true
     this.enableGraphML()
@@ -128,6 +144,96 @@ export default class extends Vue {
 
     // center the newly created graph
     this.graphComponent.fitGraphBounds()
+  }
+
+  private enableHighlights() {
+    //Support for hovering and highlighting
+    this.hoverItemHighlightManager = this.graphComponent.highlightIndicatorManager
+    this.hoverManager = new HoverManager(this.graphComponent, (item) => item?.tag?.louvain)
+    this.hoverManager.enable()
+
+    this.enableSVGHighlights()
+  }
+
+  private enableSVGHighlights() {
+    //Configure nicer styles for the SVG highlighting
+    // we want to create a non-default nice highlight styling
+    // for the hover highlight, create semi transparent orange stroke first
+    const orangeRed = Color.ORANGE_RED
+    const orangeStroke = new Stroke(orangeRed.r, orangeRed.g, orangeRed.b, 220, 3)
+    // freeze it for slightly improved performance
+    orangeStroke.freeze()
+
+    // now decorate the nodes and edges with custom hover highlight styles
+    const decorator = this.graphComponent.graph.decorator
+
+    // nodes should be given a rectangular orange rectangle highlight shape
+    const highlightShape = new ShapeNodeStyle({
+      shape: ShapeNodeShape.ELLIPSE,
+      stroke: orangeStroke,
+      fill: null
+    })
+
+    const nodeStyleHighlight = new NodeStyleDecorationInstaller({
+      nodeStyle: highlightShape,
+      // that should be slightly larger than the real node
+      margins: 3,
+      // but have a fixed size in the view coordinates
+      zoomPolicy: StyleDecorationZoomPolicy.VIEW_COORDINATES
+    })
+
+    // register it as the default implementation for all nodes
+    decorator.nodeDecorator.highlightDecorator.setImplementation(nodeStyleHighlight)
+
+    // a similar style for the edges, however cropped by the highlight's insets
+    const dummyCroppingArrow = new Arrow({
+      type: ArrowType.NONE,
+      cropLength: 5
+    })
+
+    const edgeStyle = new PolylineEdgeStyle({
+      stroke: orangeStroke,
+      targetArrow: dummyCroppingArrow,
+      sourceArrow: dummyCroppingArrow
+    })
+
+    decorator.edgeDecorator.highlightDecorator.setFactory((edge) => {
+      let highlightStyle:PolylineEdgeStyle
+      if(edge.style instanceof PolylineEdgeStyle) {
+        highlightStyle = edge.style.clone() as PolylineEdgeStyle
+        const stroke = new Stroke(orangeRed.r, orangeRed.g, orangeRed.b, 220, highlightStyle.stroke!.thickness)
+        stroke.freeze()
+        highlightStyle.stroke = stroke
+        const sourceArrow = new Arrow({
+          type: ArrowType.NONE,
+          cropLength: 5+edge.sourceNode!.layout.width/2
+        })
+        const targetArrow = new Arrow({
+          type: ArrowType.NONE,
+          cropLength: 5+edge.targetNode!.layout.width/2
+        })
+        highlightStyle.targetArrow = targetArrow
+        highlightStyle.sourceArrow = sourceArrow
+      }
+      else {
+        highlightStyle = edgeStyle
+      }
+      return new EdgeStyleDecorationInstaller({
+        edgeStyle: highlightStyle,
+        zoomPolicy: StyleDecorationZoomPolicy.WORLD_COORDINATES
+      })
+
+    })
+
+    //Support for hovering and highlighting
+    this.hoverItemHighlightManager = this.graphComponent.highlightIndicatorManager
+    this.hoverManager = new HoverManager(this.graphComponent, (item) => item?.tag?.louvain)
+    this.hoverManager.enable()
+
+    this.hoverManager.addHoveredItemsChanged((items: IModelItem[]) => {
+      this.hoverItemHighlightManager.clearHighlights()
+      items.forEach((item) => this.hoverItemHighlightManager.addHighlight(item))      
+    })
   }
 
   private configureInput():GraphEditorInputMode {

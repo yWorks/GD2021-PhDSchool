@@ -69,6 +69,7 @@ import {
 } from '../lib/VuejsNodeStyle'
 import ContextMenu from '../components/ContextMenu.vue'
 import GraphSearch from '../lib/GraphSearch'
+import {FPSMeter} from "@/lib/FPSMeter"
 
 License.value = licenseData
 
@@ -78,7 +79,8 @@ export default class extends Vue {
 
   private graphSearch!: GraphSearch
   private $query!: string
-
+  private mainFrameRate!: FPSMeter
+  
   contextMenuActions: { title: string; action: () => void }[] = [
     {
       title: 'Context Menu',
@@ -97,7 +99,9 @@ export default class extends Vue {
     this.graphComponent = new GraphComponent('#graph-component')
 
     this.graphComponent.inputMode = this.configureInput()
-
+    this.mainFrameRate = new FPSMeter()
+    this.mainFrameRate.registerFPSCounter(this.graphComponent)
+    
     this.graphComponent.graph = await loadGraph()
 
     this.graphComponent.graph.undoEngineEnabled = true

@@ -78,6 +78,7 @@
       title="Fit Graph Bounds"
       class="demo-icon-yIconZoomFit"
     ></button>
+    <span class="labeled">Current FPS: {{fps}}</span>
 
     <span class="spacer"></span>
     <input
@@ -95,6 +96,12 @@ import { ExportFormat } from '../lib/ExportSupport'
 
 @Component
 export default class Toolbar extends Vue {
+  private fps = 0
+
+  async mounted() {
+    eventBus.$on('updateFPS', (fps:number) => {this.fps = fps})
+  }
+
   private searchString = ''
 
   @Watch('searchString')

@@ -15,7 +15,8 @@ import {
     Size,
     VoidLabelStyle,
     WebGL2Animation,
-    WebGL2DefaultLabelStyle, WebGL2FadeAnimationType,
+    WebGL2DefaultLabelStyle,
+    WebGL2FadeAnimationType,
     WebGL2GraphModelManager,
     WebGL2IconLabelStyle,
     WebGL2SelectionIndicatorManager,
@@ -36,6 +37,13 @@ export type RenderModeChangedListener = (newValue: boolean) => void
  * Helper class that encapsulates all WebGL2 support
  */
 export class WebGL2Support {
+    get suspend(): boolean {
+        return this._suspend;
+    }
+
+    set suspend(value: boolean) {
+        this._suspend = value;
+    }
 
     get animationType(): AnimationType {
         return this._animationType;
@@ -50,7 +58,9 @@ export class WebGL2Support {
         return this._animator;
     }
 
-    private readonly _animator: Animator;
+    private readonly _animator: Animator
+
+    private _suspend:boolean = false
 
     private _animationType:AnimationType = AnimationType.FADE_OUT
 
@@ -107,6 +117,9 @@ export class WebGL2Support {
     }
 
     public toggleWebGL2(enable: boolean) {
+        if(this.suspend) {
+            return;
+        }
         if (enable && !this.isWebGL2Rendering) {
             this.isWebGL2Rendering = true
             this.animator.stop()

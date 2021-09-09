@@ -86,6 +86,30 @@
     <span class="labeled">WebGL Animation Type: </span>
     <toggle-button @change="toggleWebGLAnimation" :labels="{checked: 'Fade', unchecked: 'Pulse'}" :width="70" :value="true"/>
     <span class="labeled">Current FPS: {{fps}}</span>
+
+
+    <span class="separator"></span>
+    <select title="Select a layout algorithm" id="layout-combo-box">
+      <option>Organic Layout</option>
+      <option>Circular Layout</option>
+      <option>Organic with Groups Layout</option>
+      <option>RGL with Circular Layout</option>
+      <option>RGL with Balloon Layout</option>
+      <option>Node Aggregation</option>
+    </select>
+
+    <button
+        @click="applyLayout"
+        title="Layout"
+        class="demo-icon-yIconLayout"
+    ></button>
+
+    <button
+        @click="applyLayoutWithBundling"
+        title="Layout with Edge Bundling"
+        class="demo-icon-yLayout-bundling"
+    ></button>
+
     <span class="spacer"></span>
     <input
       v-model.trim="searchString"
@@ -167,6 +191,14 @@ export default class Toolbar extends Vue {
     }
     eventBus.$emit('export', exportFormat)
   }
+
+  private applyLayout(evt:any) {
+    eventBus.$emit('applyLayout')
+  }
+
+  private applyLayoutWithBundling(evt:any) {
+    eventBus.$emit('applyLayoutWithBundling')
+  }
 }
 </script>
 
@@ -210,6 +242,16 @@ export default class Toolbar extends Vue {
   }
   .labeled {
     color: white;
+  }
+
+  select {
+    height: 24px;
+    border: white;
+    border-radius: 11px;
+    font-size: 16px;
+    font-family: 'Roboto', sans-serif;
+    margin-right: 5px;
+    letter-spacing: normal;
   }
 }
 

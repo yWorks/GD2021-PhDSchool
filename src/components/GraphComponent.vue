@@ -38,6 +38,17 @@
         v-text="action.title"
       ></button>
     </ContextMenu>
+    <div id="loadingIndicator" v-show="isLoading" style="position: absolute;
+      top: 50%;
+      width: 100%;
+      height: 200px;
+      -moz-box-sizing: border-box;
+      box-sizing: border-box;
+      margin-top: -100px;
+      background-color: rgba(0, 0, 0, 0.6);
+      color: #FFFFFF;
+      padding-top: 80px;
+      text-align: center;">Loading...</div>
   </div>
 </template>
 
@@ -49,6 +60,8 @@ import {
   ArrowType,
   Color,
   EdgeStyleDecorationInstaller,
+  BezierEdgeStyle,
+  DefaultLabelStyle,
   GraphComponent,
   GraphEditorInputMode,
   GraphInputMode,
@@ -58,8 +71,13 @@ import {
   NodeStyleDecorationInstaller,
   PolylineEdgeStyle,
   ICommand,
+  IGraph,
   IModelItem,
+  INode,
+  ItemClickedEventArgs,
   License,
+  NodeAggregation,
+  NodeAggregationPolicy,
   Point,
   ShapeNodeShape,
   ShapeNodeStyle,
@@ -79,7 +97,10 @@ import {
 import ContextMenu from '../components/ContextMenu.vue'
 import GraphSearch from '../lib/GraphSearch'
 import {FPSMeter} from "@/lib/FPSMeter"
+import {runCustomLayout} from "@/lib/CustomLayout"
 import {HoverManager} from "@/lib/HoverManager"
+import {AggregationGraphWrapper} from "@/lib/AggregationGraphWrapper"
+import {AggregationHelper} from "@/lib/AggregationHelper"
 import {AnimationType, WebGL2Support} from "@/lib/WebGL2Support"
 
 License.value = licenseData
@@ -94,6 +115,9 @@ export default class extends Vue {
   private hoverItemHighlightManager!: HighlightIndicatorManager<IModelItem> 
   private hoverManager!: HoverManager
   private webGL2Support!: WebGL2Support
+  public isLoading: boolean = false
+  private originalGraph!: IGraph
+  private aggregationHelper: AggregationHelper | null = null
   contextMenuActions: { title: string; action: () => void }[] = [
     {
       title: 'Context Menu',
@@ -108,6 +132,8 @@ export default class extends Vue {
   }
 
   async mounted() {
+    this.isLoading = true
+
     // instantiate a new GraphComponent
     this.graphComponent = new GraphComponent('#graph-component')
 
@@ -116,6 +142,7 @@ export default class extends Vue {
     this.mainFrameRate.registerFPSCounter(this.graphComponent)
     
     this.graphComponent.graph = await loadGraph()
+    this.originalGraph = this.graphComponent.graph
 
     // center the newly created graph
     await this.graphComponent.fitGraphBounds()
@@ -151,6 +178,7 @@ export default class extends Vue {
     )
 
     this.registerToolbarEvents()
+    this.isLoading = false
   }
 
   private enableHighlights() {
@@ -337,9 +365,98 @@ export default class extends Vue {
     eventBus.$on('toggleAutoWebGL', (enable:boolean) => {
       this.webGL2Support.automaticRenderMode = enable
     })
+    eventBus.$on('applyLayout', () => {
+      this.runLayout(false)
+    })
+
+    eventBus.$on('applyLayoutWithBundling', () => {
+      this.runLayout(true)
+    })
+
     eventBus.$on('toggleWebGLAnimation', (enable:boolean) => {
       this.webGL2Support.animationType = enable?AnimationType.FADE_OUT:AnimationType.HIGHLIGHT
     })
+  }
+
+  private runLayout(useEdgeBundling?: boolean) {
+    this.isLoading = true
+    const layoutIndex = (document.getElementById('layout-combo-box') as HTMLSelectElement).selectedIndex
+    let layoutStyle: string
+    let runAsync = false
+    switch (layoutIndex) {
+      default:
+      case 0: layoutStyle = 'organic'; break;
+      case 1: layoutStyle = 'custom-circular'; break;
+      case 2: layoutStyle = 'custom-groups-organic'; break;
+      case 3: layoutStyle = 'custom-rgl-circular'; break;
+      case 4: layoutStyle = 'custom-rgl-balloon'; break;
+      case 5: layoutStyle = 'aggregation'; break;
+    }
+    setTimeout(async () => {
+      if (this.aggregationHelper && this.aggregationHelper.aggregateGraph) {
+        this.aggregationHelper.aggregateGraph.dispose()
+      }
+
+      if (layoutStyle === 'aggregation') {
+        //Disable webgl for aggregation for now
+        this.webGL2Support.toggleWebGL2(false)
+        this.webGL2Support.suspend = true
+        this.hoverItemHighlightManager.enabled = false
+        this.graphComponent.graph = this.aggregateGraph()
+      } else {
+        this.graphComponent.graph = this.originalGraph
+        this.hoverItemHighlightManager.enabled = true
+        this.webGL2Support.suspend = false
+      }
+      await runCustomLayout(this.graphComponent, layoutStyle, useEdgeBundling)
+      this.isLoading = false
+    }, 20)
+  }
+
+  private aggregateGraph(): IGraph {
+    const nodeAggregation = new NodeAggregation({
+      aggregation: NodeAggregationPolicy.STRUCTURAL,
+      minimumClusterSize: 6,
+      nodesOnlyOnLeaves: false
+    })
+
+    const graph = this.graphComponent.graph
+    const aggregationResult = nodeAggregation.run(graph)
+    const aggregateGraph = new AggregationGraphWrapper(graph);
+    this.aggregationHelper = new AggregationHelper(aggregationResult, aggregateGraph)
+    this.aggregationHelper.aggregationNodeStyle = new ShapeNodeStyle({
+      fill: 'rgba(93, 173, 226,1)',
+      stroke: 'white',
+      shape: 'ellipse'
+    })
+    this.aggregationHelper.hierarchyEdgeStyle = new BezierEdgeStyle({
+      stroke: 'dashed #73000000',
+      targetArrow: new Arrow({ type: ArrowType.SIMPLE, stroke: '#73000000' })
+    })
+    this.aggregationHelper.descendantLabelStyle = new DefaultLabelStyle({
+      textFill: '#80000000',
+      textSize: 20
+    })
+    this.aggregationHelper.separate(this.aggregationHelper.aggregateRecursively(aggregationResult.root))
+
+    ;(this.graphComponent.inputMode as GraphEditorInputMode).addItemClickedListener(
+        (sender: object, evt: ItemClickedEventArgs<IModelItem>) => {
+          if (!(evt.item instanceof INode)) {
+            return
+          }
+
+          let node = evt.item
+          evt.handled = true
+
+          if (!this.aggregationHelper!.aggregateGraph.isAggregationItem(node)) {
+            return
+          }
+
+          this.aggregationHelper!.toggleAggregation(node)
+          runCustomLayout(this.graphComponent, 'aggregation')
+        }
+    )
+    return aggregateGraph
   }
 
   /**
